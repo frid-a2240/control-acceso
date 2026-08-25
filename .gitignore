@@ -1,0 +1,21 @@
+# ============ Backend (Python / FastAPI) ============
+backend/venv/
+backend/.env
+backend/__pycache__/
+backend/**/__pycache__/
+*.pyc
+backend/storage/fotos/*
+backend/storage/pdfs/*
+backend/prueba.pdf
+
+# ============ Frontend (Node / Vite) ============
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+*.local
+
+# ============ Editor / OS ============
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

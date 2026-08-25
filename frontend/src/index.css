@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+/* ============================================================
+   Tema claro — Control de Acceso ISP
+   ============================================================ */
+:root {
+  /* Fondos */
+  --background: #f8fafc;
+  --card: #ffffff;
+  --input-background: #ffffff;
+
+  /* Texto */
+  --foreground: #1f2937;
+  --muted-foreground: #6b7280;
+
+  /* Bordes y superficies neutras */
+  --border: #e5e7eb;
+  --muted: #f3f4f6;
+  --secondary: #f3f4f6;
+
+  /* Colores ISP */
+  --isp-turquesa: #00B8B0;
+  --isp-azul: #203454;
+
+  --primary: var(--isp-turquesa);
+  --primary-foreground: #ffffff;
+}
+
+/* Base */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Montserrat', sans-serif;
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+h1, h2, h3, h4 {
+  margin: 0;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+h2 { font-size: 1rem; }
+h3 { font-size: 0.875rem; }
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 8px;
+  border: 2px solid var(--background);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Inputs reutilizables */
+.input {
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid #e2e8f0;
+  background-color: #ffffff;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  color: #0f172a;
+  outline: none;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(0, 184, 176, 0.1);
+}
+.input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.input::placeholder {
+  color: #94a3b8;
+}
+/* Animación slide-in para toasts */
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.25s ease-out;
+}
