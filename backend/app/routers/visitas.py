@@ -1,19 +1,28 @@
 """Visitas — solicitudes de acceso (creación, listados, aprobación/rechazo)."""
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_user, require_encargado, require_guardia
+from app.core.auth import (
+    get_current_user, require_guardia_u_opip, require_opip, require_solicitante,
+)
 from app.database import get_db
 from app.models.persona import Persona
 from app.models.usuario import Usuario, RolUsuario
 from app.models.vehiculo import Vehiculo
 from app.models.visita import Visita, EstadoVisita
-from app.schemas.visita import VisitaCreate, VisitaOut, VisitaResumen, VisitaResolucion
-from app.services.email_service import enviar_notificacion_encargado
-from app.services.pdf_generator import generar_pdf_visita
-from app.services.websocket_manager import manager
+from app.schemas.visita import (
+    VisitaCreate, VisitaOut, VisitaResumen, VisitaResolucion, VisitaVigente,
+)
+from app.services.alcance import visibles
+from app.services.empresas import registrar_empresa
+from app.services.notificaciones import avisar_resolucion, avisar_solicitud_nueva
+from app.services.vigencia import (
+    JORNADA_INICIO, limite_para_aprobar, plazo_al_aprobar, proxima_ventana,
+    texto_horario, ventana_actual,
+)
 
 
 router = APIRouter(prefix="/api/visitas", tags=["visitas"])
@@ -41,55 +50,48 @@ def _generar_folio(db: Session) -> str:
     return f"{prefijo}{siguiente:04d}"
 
 
-async def _tarea_generar_pdf_y_notificar(visita_id: int) -> None:
-    """Se ejecuta en background después de crear la visita:
-    genera el PDF y envía el correo al encargado. No bloquea la respuesta HTTP."""
-    from app.database import SessionLocal
-    db = SessionLocal()
-    try:
-        visita = db.query(Visita).filter(Visita.id == visita_id).first()
-        if not visita:
-            return
-
-        pdf_path = generar_pdf_visita(visita)
-
-        await enviar_notificacion_encargado(
-            folio=visita.folio,
-            empresa=visita.empresa_solicitante,
-            persona_a_visitar=visita.persona_a_visitar,
-            area=visita.area_a_visitar,
-            pdf_path=pdf_path,
-        )
-    except Exception as exc:
-        # Log a consola — no queremos que un fallo de correo bote la app
-        print(f"[BG] Falló generación/envío para visita {visita_id}: {exc}")
-    finally:
-        db.close()
-
-
-# ---------- Endpoints del guardia ----------
+# ---------- Endpoints del solicitante ----------
 
 @router.post("", response_model=VisitaOut, status_code=status.HTTP_201_CREATED)
 def crear_visita(
     data: VisitaCreate,
     background: BackgroundTasks,
     db: Session = Depends(get_db),
-    guardia: Usuario = Depends(require_guardia),
+    solicitante: Usuario = Depends(require_solicitante),
 ):
-    """Guardia crea una nueva solicitud. Se manda a aprobación del encargado."""
+    """El solicitante (coordinador, jefe de área o colaborador) crea una
+    nueva solicitud. Se manda a aprobación de OPIP."""
     if not data.persona_ids:
         raise HTTPException(
             status_code=400,
             detail="Debe incluir al menos una persona en la visita",
         )
 
-    personas = db.query(Persona).filter(Persona.id.in_(data.persona_ids)).all()
+    if data.fecha_fin < data.fecha_inicio:
+        raise HTTPException(
+            status_code=400,
+            detail="La fecha fin no puede ser anterior a la de inicio",
+        )
+    limite = limite_para_aprobar(data.fecha_inicio, data.fecha_fin)
+    if limite <= datetime.now():
+        raise HTTPException(
+            status_code=400,
+            detail="El plazo de la visita ya pasó. Revisa las fechas.",
+        )
+    # En varios días rige la jornada (08:00 a 17:00): no aplican hora ni horas
+    varios_dias = data.fecha_inicio != data.fecha_fin
+    if not varios_dias and data.hora_inicio is None:
+        raise HTTPException(status_code=400, detail="La hora de llegada es obligatoria")
+    hora_inicio = JORNADA_INICIO if varios_dias else data.hora_inicio.replace(tzinfo=None)
+
+    # Solo visitantes y placas registrados por este solicitante
+    personas = visibles(db, Persona, solicitante).filter(Persona.id.in_(data.persona_ids)).all()
     if len(personas) != len(data.persona_ids):
         raise HTTPException(status_code=400, detail="Alguna persona no existe")
 
     vehiculos = []
     if data.vehiculo_ids:
-        vehiculos = db.query(Vehiculo).filter(Vehiculo.id.in_(data.vehiculo_ids)).all()
+        vehiculos = visibles(db, Vehiculo, solicitante).filter(Vehiculo.id.in_(data.vehiculo_ids)).all()
         if len(vehiculos) != len(data.vehiculo_ids):
             raise HTTPException(status_code=400, detail="Algún vehículo no existe")
 
@@ -101,13 +103,16 @@ def crear_visita(
         area_a_visitar=data.area_a_visitar.strip(),
         fecha_inicio=data.fecha_inicio,
         fecha_fin=data.fecha_fin,
-        duracion_horas=data.duracion_horas,
-        duracion_dias=data.duracion_dias,
-        horario=data.horario.strip(),
+        duracion_horas=None if varios_dias else data.duracion_horas,
+        duracion_dias=(data.fecha_fin - data.fecha_inicio).days + 1 if varios_dias else None,
+        horario=texto_horario(data.fecha_inicio, data.fecha_fin, hora_inicio),
+        hora_inicio=hora_inicio,
+        vigente_hasta=limite,
         observaciones=data.observaciones,
         estado=EstadoVisita.PENDIENTE,
-        guardia_id=guardia.id,
+        solicitante_id=solicitante.id,
     )
+    registrar_empresa(db, visita.empresa_solicitante)
     visita.personas = personas
     visita.vehiculos = vehiculos
 
@@ -121,8 +126,8 @@ def crear_visita(
         p.ultima_visita = ahora
     db.commit()
 
-    # PDF + correo en background — la respuesta al guardia sale de inmediato
-    background.add_task(_tarea_generar_pdf_y_notificar, visita.id)
+    # Avisos en background — la respuesta al solicitante sale de inmediato
+    background.add_task(avisar_solicitud_nueva, visita.id)
 
     return visita
 
@@ -130,14 +135,14 @@ def crear_visita(
 @router.get("/mis-solicitudes", response_model=list[VisitaResumen])
 def mis_solicitudes(
     db: Session = Depends(get_db),
-    guardia: Usuario = Depends(require_guardia),
+    solicitante: Usuario = Depends(require_solicitante),
 ):
-    """Historial del guardia — sus últimas solicitudes con estado actual."""
+    """Historial del solicitante — sus últimas solicitudes con estado actual."""
     resultados = (
         db.query(Visita)
-        .filter(Visita.guardia_id == guardia.id)
+        .filter(Visita.solicitante_id == solicitante.id)
         .order_by(Visita.fecha_creacion.desc())
-        .limit(100)
+        .limit(1000)
         .all()
     )
     return [
@@ -147,6 +152,7 @@ def mis_solicitudes(
             empresa_solicitante=v.empresa_solicitante,
             persona_a_visitar=v.persona_a_visitar,
             estado=v.estado,
+            vencida=v.vencida,
             fecha_creacion=v.fecha_creacion,
             total_personas=len(v.personas),
         )
@@ -154,14 +160,14 @@ def mis_solicitudes(
     ]
 
 
-# ---------- Endpoints del encargado ----------
+# ---------- Endpoints de OPIP ----------
 
 @router.get("/pendientes", response_model=list[VisitaResumen])
 def listar_pendientes(
     db: Session = Depends(get_db),
-    _: Usuario = Depends(require_encargado),
+    _: Usuario = Depends(require_opip),
 ):
-    """Bandeja de entrada del encargado — todas las visitas pendientes."""
+    """Bandeja de entrada de OPIP — todas las visitas pendientes."""
     resultados = (
         db.query(Visita)
         .filter(Visita.estado == EstadoVisita.PENDIENTE)
@@ -175,6 +181,7 @@ def listar_pendientes(
             empresa_solicitante=v.empresa_solicitante,
             persona_a_visitar=v.persona_a_visitar,
             estado=v.estado,
+            vencida=v.vencida,
             fecha_creacion=v.fecha_creacion,
             total_personas=len(v.personas),
         )
@@ -185,14 +192,20 @@ def listar_pendientes(
 @router.get("/historial", response_model=list[VisitaResumen])
 def historial(
     db: Session = Depends(get_db),
-    _: Usuario = Depends(require_encargado),
+    _: Usuario = Depends(require_opip),
 ):
-    """Historial completo — todas las visitas resueltas."""
+    """Historial — rechazadas y aprobadas cuyo plazo ya terminó."""
     resultados = (
         db.query(Visita)
-        .filter(Visita.estado != EstadoVisita.PENDIENTE)
+        .filter(or_(
+            Visita.estado == EstadoVisita.RECHAZADA,
+            and_(
+                Visita.estado == EstadoVisita.APROBADA,
+                Visita.vigente_hasta <= datetime.now(),
+            ),
+        ))
         .order_by(Visita.fecha_resolucion.desc())
-        .limit(200)
+        .limit(5000)
         .all()
     )
     return [
@@ -202,6 +215,7 @@ def historial(
             empresa_solicitante=v.empresa_solicitante,
             persona_a_visitar=v.persona_a_visitar,
             estado=v.estado,
+            vencida=v.vencida,
             fecha_creacion=v.fecha_creacion,
             total_personas=len(v.personas),
         )
@@ -209,33 +223,59 @@ def historial(
     ]
 
 
-@router.delete("/{visita_id}", status_code=status.HTTP_204_NO_CONTENT)
-def eliminar_visita(
-    visita_id: int,
+@router.get("/aprobadas", response_model=list[VisitaVigente])
+def listar_aprobadas(
     db: Session = Depends(get_db),
-    _: Usuario = Depends(require_encargado),
+    usuario: Usuario = Depends(require_guardia_u_opip),
 ):
-    """Borra una solicitud (uso temporal mientras el sistema está en pruebas).
+    """Aprobadas dentro de su plazo.
 
-    El folio es secuencial por conteo de filas del año (`_generar_folio`),
-    así que al borrar visitas el próximo folio generado se reacomoda solo.
+    El guardia ve solo las que tienen acceso hoy; OPIP también las aprobadas
+    para días siguientes, para no perderlas de vista hasta que venzan.
     """
-    visita = db.query(Visita).filter(Visita.id == visita_id).first()
-    if not visita:
-        raise HTTPException(status_code=404, detail="Visita no encontrada")
-
-    db.delete(visita)
-    db.commit()
+    ahora = datetime.now()
+    visitas = (
+        db.query(Visita)
+        .filter(
+            Visita.estado == EstadoVisita.APROBADA,
+            Visita.vigente_hasta > ahora,
+        )
+        .all()
+    )
+    vigentes = []
+    for v in visitas:
+        solo_hoy = usuario.rol == RolUsuario.GUARDIA
+        ventana = ventana_actual(v, ahora) if solo_hoy else proxima_ventana(v, ahora)
+        if ventana is None:
+            continue
+        inicio, fin = ventana
+        vigentes.append(VisitaVigente(
+            id=v.id,
+            folio=v.folio,
+            empresa_solicitante=v.empresa_solicitante,
+            justificacion=v.justificacion,
+            persona_a_visitar=v.persona_a_visitar,
+            area_a_visitar=v.area_a_visitar,
+            fecha_inicio=v.fecha_inicio,
+            fecha_fin=v.fecha_fin,
+            inicio=inicio.astimezone(),  # con zona, para que el navegador no la adivine
+            fin=fin.astimezone(),
+            en_horario=inicio <= ahora,
+            personas=v.personas,
+            vehiculos=v.vehiculos,
+        ))
+    return sorted(vigentes, key=lambda x: x.inicio)
 
 
 @router.post("/{visita_id}/resolver", response_model=VisitaOut)
-async def resolver_visita(
+def resolver_visita(
     visita_id: int,
     resolucion: VisitaResolucion,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
-    encargado: Usuario = Depends(require_encargado),
+    opip: Usuario = Depends(require_opip),
 ):
-    """Encargado aprueba o rechaza. Notifica al guardia vía WebSocket."""
+    """OPIP aprueba o rechaza. Avisa al solicitante y, si aprueba, a los guardias."""
     visita = db.query(Visita).filter(Visita.id == visita_id).first()
     if not visita:
         raise HTTPException(status_code=404, detail="Visita no encontrada")
@@ -245,25 +285,22 @@ async def resolver_visita(
             detail=f"La visita ya fue {visita.estado.value}",
         )
 
+    if resolucion.aprobar and visita.vigente_hasta <= datetime.now():
+        raise HTTPException(
+            status_code=400,
+            detail="El plazo de esta visita ya venció: no se puede aprobar, solo rechazar",
+        )
+
     visita.estado = EstadoVisita.APROBADA if resolucion.aprobar else EstadoVisita.RECHAZADA
-    visita.encargado_id = encargado.id
+    if resolucion.aprobar:
+        visita.vigente_desde, visita.vigente_hasta = plazo_al_aprobar(visita, datetime.now())
+    visita.opip_id = opip.id
     visita.comentario_resolucion = resolucion.comentario
     visita.fecha_resolucion = datetime.utcnow()
     db.commit()
     db.refresh(visita)
 
-    # WebSocket → notifica al guardia que creó la visita, en tiempo real
-    await manager.notify_guardia(
-        visita.guardia_id,
-        {
-            "type": "visita_resuelta",
-            "visita_id": visita.id,
-            "folio": visita.folio,
-            "estado": visita.estado.value,
-            "comentario": visita.comentario_resolucion,
-            "fecha_resolucion": visita.fecha_resolucion.isoformat(),
-        },
-    )
+    background.add_task(avisar_resolucion, visita.id)
 
     return visita
 
@@ -278,14 +315,22 @@ def obtener_visita(
 ):
     """Detalle completo — el formato lleno.
 
-    El encargado ve cualquier solicitud; el guardia solo las que él capturó.
+    OPIP ve cualquier solicitud; el solicitante solo las que él capturó; el
+    guardia solo las aprobadas con acceso hoy.
     """
     v = db.query(Visita).filter(Visita.id == visita_id).first()
     if not v:
         raise HTTPException(status_code=404, detail="Visita no encontrada")
-    if usuario.rol == RolUsuario.GUARDIA and v.guardia_id != usuario.id:
+    if usuario.rol == RolUsuario.SOLICITANTE and v.solicitante_id != usuario.id:
         raise HTTPException(
             status_code=403,
             detail="Solo puedes consultar las solicitudes que tú capturaste",
+        )
+    if usuario.rol == RolUsuario.GUARDIA and (
+        v.estado != EstadoVisita.APROBADA or ventana_actual(v, datetime.now()) is None
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Esta solicitud no tiene acceso vigente",
         )
     return v

@@ -10,18 +10,18 @@ from app.core.security import hash_password
 
 USUARIOS_INICIALES = [
     {
-        "username": "guardia1",
-        "nombre_completo": "Guardia 1",
+        "username": "solicitante_demo",
+        "nombre_completo": "Solicitante Demo",
         "email": None,
-        "password": "guardia123",
-        "rol": RolUsuario.GUARDIA,
+        "password": "solicitante123",
+        "rol": RolUsuario.GUARDIA,  # usuario de prueba de los guardias
     },
     {
-        "username": "encargado",
-        "nombre_completo": "Encargado de Control de Acceso",
+        "username": "opip",
+        "nombre_completo": "OPIP - Control de Acceso",
         "email": "isp.amayacuriel@gmail.com",  # ajusta al correo real
-        "password": "encargado123",
-        "rol": RolUsuario.ENCARGADO,
+        "password": "opip123",
+        "rol": RolUsuario.OPIP,
     },
 ]
 
@@ -41,6 +41,8 @@ def main() -> None:
                 email=data["email"],
                 password_hash=hash_password(data["password"]),
                 rol=data["rol"],
+                registrado=True,
+                debe_cambiar_password=True,
             )
             db.add(u)
             print(f"+ {data['username']} ({data['rol'].value}) — password: {data['password']}")

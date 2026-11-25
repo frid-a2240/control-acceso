@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class PersonaBreve(BaseModel):
-    """Dueño de las placas — lo mínimo para que el guardia verifique a quién pertenecen.
+    """Dueño de las placas — lo mínimo para que el solicitante verifique a quién pertenecen.
 
     Vive aquí (y no en schemas/persona.py) para evitar el import circular:
     PersonaOut ya incluye sus vehículos.
@@ -21,6 +21,7 @@ class VehiculoOut(BaseModel):
     id: int
     marca: str
     modelo: str
+    anio: int | None
     placas: str
     fecha_registro: datetime
     personas: list[PersonaBreve] = Field(default_factory=list)

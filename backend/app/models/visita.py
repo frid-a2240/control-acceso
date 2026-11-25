@@ -2,12 +2,14 @@
 
 Una visita puede incluir varias personas y varios vehículos (M2M).
 Estados: pendiente → aprobada / rechazada.
+El solicitante (coordinador, jefe de área o colaborador) captura la
+solicitud; OPIP la aprueba o la rechaza cuando la persona llega.
 """
-from datetime import datetime, date
+from datetime import datetime, date, time
 from enum import Enum as PyEnum
 
 from sqlalchemy import (
-    String, DateTime, Date, Integer, Text, Enum,
+    String, DateTime, Date, Time, Integer, Text, Enum,
     ForeignKey, Table, Column,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -56,6 +58,11 @@ class Visita(Base):
     duracion_horas: Mapped[int | None] = mapped_column(Integer, nullable=True)
     duracion_dias: Mapped[int | None] = mapped_column(Integer, nullable=True)
     horario: Mapped[str] = mapped_column(String(50), nullable=False)
+    hora_inicio: Mapped[time] = mapped_column(Time, nullable=False)
+    # Hora local. Mientras está pendiente es el límite para aprobarla; al
+    # aprobar se fija el plazo real y al vencer pasa de Aprobadas al historial.
+    vigente_hasta: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    vigente_desde: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     observaciones: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # ---- Flujo de aprobación ----
@@ -65,10 +72,10 @@ class Visita(Base):
         nullable=False,
         index=True,
     )
-    guardia_id: Mapped[int] = mapped_column(
+    solicitante_id: Mapped[int] = mapped_column(
         ForeignKey("usuarios_sistema.id"), nullable=False
     )
-    encargado_id: Mapped[int | None] = mapped_column(
+    opip_id: Mapped[int | None] = mapped_column(
         ForeignKey("usuarios_sistema.id"), nullable=True
     )
     comentario_resolucion: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -79,8 +86,13 @@ class Visita(Base):
     )
     fecha_resolucion: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    @property
+    def vencida(self) -> bool:
+        """Aprobada cuyo plazo ya terminó."""
+        return self.estado == EstadoVisita.APROBADA and self.vigente_hasta <= datetime.now()
+
     # ---- Relaciones ----
-    guardia: Mapped["Usuario"] = relationship(foreign_keys=[guardia_id])
-    encargado: Mapped["Usuario | None"] = relationship(foreign_keys=[encargado_id])
+    solicitante: Mapped["Usuario"] = relationship(foreign_keys=[solicitante_id])
+    opip: Mapped["Usuario | None"] = relationship(foreign_keys=[opip_id])
     personas: Mapped[list["Persona"]] = relationship(secondary=visita_personas, lazy="selectin")
     vehiculos: Mapped[list["Vehiculo"]] = relationship(secondary=visita_vehiculos, lazy="selectin")

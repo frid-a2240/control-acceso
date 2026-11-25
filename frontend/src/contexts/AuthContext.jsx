@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import api from '../services/api'
+import { authService } from '../services/auth'
 
 const AuthContext = createContext(null)
 
@@ -16,6 +17,15 @@ export function AuthProvider({ children }) {
       } catch {
         localStorage.removeItem('acceso_user')
       }
+      // Refresca rol, correo y demás: pudieron cambiar desde el último ingreso
+      authService.perfil()
+        .then((perfil) => {
+          localStorage.setItem('acceso_user', JSON.stringify(perfil))
+          setUser(perfil)
+        })
+        .catch(() => {})  // sin conexión se usa lo guardado; un 401 cierra sesión en api.js
+        .finally(() => setLoading(false))
+      return
     }
     setLoading(false)
   }, [])
@@ -34,11 +44,20 @@ export function AuthProvider({ children }) {
       username,
       nombre_completo: data.nombre_completo,
       rol: data.rol,
+      departamento: data.departamento,
+      email: data.email,
+      debe_cambiar_password: data.debe_cambiar_password,
     }
     localStorage.setItem('acceso_token', data.access_token)
     localStorage.setItem('acceso_user', JSON.stringify(userData))
     setUser(userData)
     return userData
+  }
+
+  const actualizarUsuario = (cambios) => {
+    const actualizado = { ...user, ...cambios }
+    localStorage.setItem('acceso_user', JSON.stringify(actualizado))
+    setUser(actualizado)
   }
 
   const logout = () => {
@@ -50,7 +69,7 @@ export function AuthProvider({ children }) {
   const token = () => localStorage.getItem('acceso_token')
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, token }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, token, actualizarUsuario }}>
       {children}
     </AuthContext.Provider>
   )

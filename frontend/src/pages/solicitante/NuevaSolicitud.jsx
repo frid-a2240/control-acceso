@@ -20,8 +20,7 @@ export default function NuevaSolicitud() {
     fecha_inicio: '',
     fecha_fin: '',
     duracion_horas: '',
-    duracion_dias: '',
-    horario: '',
+    hora_inicio: '',
     observaciones: '',
   })
   const [personas, setPersonas] = useState([])
@@ -29,6 +28,11 @@ export default function NuevaSolicitud() {
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState('')
   const [exito, setExito] = useState(null)  // objeto visita
+
+  const variosDias = !!form.fecha_inicio && form.fecha_fin > form.fecha_inicio
+  const totalDias = variosDias
+    ? Math.round((new Date(form.fecha_fin) - new Date(form.fecha_inicio)) / 86400000) + 1
+    : 1
 
   const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -78,15 +82,15 @@ export default function NuevaSolicitud() {
     if (!form.area_a_visitar.trim()) { setError('Área a visitar es obligatoria.'); return }
     if (!form.fecha_inicio || !form.fecha_fin) { setError('Fechas de inicio y fin son obligatorias.'); return }
     if (form.fecha_fin < form.fecha_inicio) { setError('La fecha fin no puede ser anterior a la de inicio.'); return }
-    if (!form.horario.trim()) { setError('Horario es obligatorio.'); return }
+    if (!variosDias && !form.hora_inicio) { setError('La hora de llegada es obligatoria.'); return }
     if (personas.length === 0) { setError('Agrega al menos un visitante.'); return }
 
     setEnviando(true)
     try {
       const payload = {
         ...form,
-        duracion_horas: form.duracion_horas ? parseInt(form.duracion_horas, 10) : null,
-        duracion_dias: form.duracion_dias ? parseInt(form.duracion_dias, 10) : null,
+        duracion_horas: !variosDias && form.duracion_horas ? parseInt(form.duracion_horas, 10) : null,
+        hora_inicio: variosDias ? null : form.hora_inicio,
         observaciones: form.observaciones || null,
         persona_ids: personas.map((p) => p.id),
         vehiculo_ids: vehiculos.map((v) => v.id),
@@ -94,7 +98,8 @@ export default function NuevaSolicitud() {
       const creada = await visitasService.crear(payload)
       setExito(creada)
     } catch (err) {
-      setError(err.response?.data?.detail || 'No se pudo crear la solicitud.')
+      const detalle = err.response?.data?.detail
+      setError(typeof detalle === 'string' ? detalle : 'No se pudo crear la solicitud. Revisa los datos.')
     } finally {
       setEnviando(false)
     }
@@ -110,7 +115,7 @@ export default function NuevaSolicitud() {
           </div>
           <h2 className="text-2xl font-bold text-slate-900 mb-2">Solicitud enviada</h2>
           <p className="text-sm text-slate-500 mb-4">
-            El encargado ha sido notificado por correo y debe aprobarla o rechazarla.
+            OPIP ha sido notificado por correo y debe aprobarla o rechazarla.
           </p>
           <div className="inline-block bg-slate-100 rounded-lg px-4 py-2 mb-6">
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Folio</div>
@@ -118,7 +123,7 @@ export default function NuevaSolicitud() {
           </div>
           <div className="flex items-center justify-center gap-2">
             <button
-              onClick={() => navigate('/guardia')}
+              onClick={() => navigate('/solicitante')}
               className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
             >
               Ver mis solicitudes
@@ -129,7 +134,7 @@ export default function NuevaSolicitud() {
                 setForm({
                   empresa_solicitante: '', justificacion: '', persona_a_visitar: '',
                   area_a_visitar: '', fecha_inicio: '', fecha_fin: '',
-                  duracion_horas: '', duracion_dias: '', horario: '', observaciones: '',
+                  duracion_horas: '', hora_inicio: '', observaciones: '',
                 })
                 setPersonas([])
                 setVehiculos([])
@@ -150,7 +155,7 @@ export default function NuevaSolicitud() {
       {/* Header */}
       <div className="mb-6">
         <button
-          onClick={() => navigate('/guardia')}
+          onClick={() => navigate('/solicitante')}
           className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 mb-2 transition"
         >
           <ArrowLeft size={14} />
@@ -220,34 +225,37 @@ export default function NuevaSolicitud() {
                 onChange={(e) => setField('fecha_fin', e.target.value)}
               />
             </Field>
-            <Field label="Duración en horas">
-              <input
-                type="number"
-                min="1"
-                className="input"
-                value={form.duracion_horas}
-                onChange={(e) => setField('duracion_horas', e.target.value)}
-                placeholder="Ej. 6"
-              />
-            </Field>
-            <Field label="Duración en días">
-              <input
-                type="number"
-                min="1"
-                className="input"
-                value={form.duracion_dias}
-                onChange={(e) => setField('duracion_dias', e.target.value)}
-                placeholder="Ej. 1"
-              />
-            </Field>
-            <Field label="Horario" required span={2}>
-              <input
-                className="input"
-                value={form.horario}
-                onChange={(e) => setField('horario', e.target.value)}
-                placeholder="Ej. 9:00am - 3:00pm"
-              />
-            </Field>
+            {variosDias ? (
+              <div className="md:col-span-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                <strong>{totalDias} días</strong> · el acceso vale de <strong>8:00 a.m. a 5:00 p.m.</strong> cada día.
+              </div>
+            ) : (
+              <>
+                <Field label="Hora de llegada" required>
+                  <input
+                    type="time"
+                    className="input"
+                    value={form.hora_inicio}
+                    onChange={(e) => setField('hora_inicio', e.target.value)}
+                  />
+                </Field>
+                <Field label="Duración en horas">
+                  <input
+                    type="number"
+                    min="1"
+                    max="24"
+                    className="input"
+                    value={form.duracion_horas}
+                    onChange={(e) => setField('duracion_horas', e.target.value)}
+                    placeholder="Ej. 4"
+                  />
+                </Field>
+                <p className="md:col-span-2 text-[11px] text-slate-500">
+                  Las horas cuentan desde la hora de llegada. Si OPIP aprueba después de esa hora,
+                  cuentan desde la aprobación. Sin horas, el acceso vale hasta terminar el día.
+                </p>
+              </>
+            )}
           </div>
         </Card>
 
@@ -294,7 +302,7 @@ export default function NuevaSolicitud() {
         <div className="flex items-center justify-end gap-2 sticky bottom-0 bg-[var(--background)] py-3 border-t border-slate-200">
           <button
             type="button"
-            onClick={() => navigate('/guardia')}
+            onClick={() => navigate('/solicitante')}
             className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
           >
             Cancelar

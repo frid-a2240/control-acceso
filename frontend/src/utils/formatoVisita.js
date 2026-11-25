@@ -1,6 +1,6 @@
 import { Clock, CheckCircle2, XCircle } from 'lucide-react'
 
-/** Estilos e icono por estado — compartidos por el encargado y el guardia. */
+/** Estilos e icono por estado — compartidos por OPIP y el solicitante. */
 export const estadoConfig = {
   pendiente: {
     label: 'Pendiente', icon: Clock,
@@ -16,14 +16,28 @@ export const estadoConfig = {
   },
 }
 
+/**
+ * Fecha del backend → Date local. Las fechas sin hora (2026-11-25) son días
+ * de calendario y las fechas con hora sin zona vienen en UTC; con `new Date`
+ * directo saldrían un día antes y con horas de diferencia.
+ */
+export function parseFecha(iso) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return new Date(`${iso}T00:00:00`)
+  return new Date(/(Z|[+-]\d{2}:\d{2})$/.test(iso) ? iso : `${iso}Z`)
+}
+
+export function formatHora(iso) {
+  return parseFecha(iso).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+}
+
 export function formatFecha(iso) {
-  return new Date(iso).toLocaleDateString('es-MX', {
+  return parseFecha(iso).toLocaleDateString('es-MX', {
     day: '2-digit', month: '2-digit', year: 'numeric',
   })
 }
 
 export function formatFechaHora(iso) {
-  return new Date(iso).toLocaleString('es-MX', {
+  return parseFecha(iso).toLocaleString('es-MX', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   })

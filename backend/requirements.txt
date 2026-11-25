@@ -24,6 +24,9 @@ fastapi-mail>=1.4.2
 # Generación de PDF
 reportlab>=4.2.5
 
+# Importación del padrón (Excel)
+openpyxl>=3.1
+
 # Manejo de imágenes
 Pillow>=11.0.0
 

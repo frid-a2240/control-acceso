@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 
 import { visitasService } from '../../services/visitas'
+import { formatFechaHora } from '../../utils/formatoVisita'
 
 const estadoConfig = {
   pendiente: {
@@ -29,21 +30,13 @@ const estadoConfig = {
   },
 }
 
-function formatFecha(iso) {
-  const d = new Date(iso)
-  return d.toLocaleString('es-MX', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  })
-}
-
 export default function MisSolicitudes() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const { suscribir } = useRealtime()
 
-// Actualiza la lista en vivo cuando el encargado resuelve una solicitud
+// Actualiza la lista en vivo cuando OPIP resuelve una solicitud
 useEffect(() => {
   return suscribir((evento) => {
     if (evento.type !== 'visita_resuelta') return
@@ -99,7 +92,7 @@ useEffect(() => {
             Actualizar
           </button>
           <Link
-            to="/guardia/nueva"
+            to="/solicitante/nueva"
             className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition shadow-sm"
             style={{
               background: 'linear-gradient(135deg, var(--isp-turquesa), #009690)',
@@ -176,9 +169,9 @@ function SolicitudRow({ visita }) {
 
   return (
     <li>
-      {/* Al dar click se abre el formato completo, igual que lo ve el encargado */}
+      {/* Al dar click se abre el formato completo, igual que lo ve OPIP */}
       <Link
-        to={`/guardia/visita/${visita.id}`}
+        to={`/solicitante/visita/${visita.id}`}
         className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 hover:bg-slate-50 transition"
       >
         <div className={`h-10 w-10 rounded-lg flex items-center justify-center border ${cfg.className} shrink-0`}>
@@ -195,6 +188,11 @@ function SolicitudRow({ visita }) {
             <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${cfg.className}`}>
               {cfg.label}
             </span>
+            {visita.vencida && (
+              <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-slate-50 text-slate-500 border-slate-200">
+                Plazo terminado
+              </span>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-700">
             <span className="flex items-center gap-1.5">
@@ -207,7 +205,7 @@ function SolicitudRow({ visita }) {
             </span>
           </div>
           <div className="mt-1 text-xs text-slate-400">
-            {formatFecha(visita.fecha_creacion)} · {visita.total_personas} visitante{visita.total_personas !== 1 ? 's' : ''}
+            {formatFechaHora(visita.fecha_creacion)} · {visita.total_personas} visitante{visita.total_personas !== 1 ? 's' : ''}
           </div>
         </div>
 
@@ -226,7 +224,7 @@ function EmptyState() {
         Cuando captures una nueva solicitud aparecerá aquí con su estado.
       </p>
       <Link
-        to="/guardia/nueva"
+        to="/solicitante/nueva"
         className="mt-4 inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition shadow-sm"
         style={{
           background: 'linear-gradient(135deg, var(--isp-turquesa), #009690)',

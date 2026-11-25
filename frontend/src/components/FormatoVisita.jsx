@@ -6,7 +6,7 @@ import { estadoConfig, formatFecha, formatFechaHora } from '../utils/formatoVisi
 
 /**
  * Formato PDP-PPIP-F-03 lleno, en solo lectura.
- * Lo usan tanto el encargado (Pendientes / Historial) como el guardia
+ * Lo usan tanto OPIP (Pendientes / Historial) como el solicitante
  * (Mis Solicitudes) — es el mismo documento.
  */
 export default function FormatoVisita({ visita }) {
@@ -126,13 +126,14 @@ export default function FormatoVisita({ visita }) {
                 <tr className="bg-slate-100 border-b border-slate-300 text-[10px] uppercase tracking-wider text-slate-600">
                   <th className="text-left px-3 py-2">Marca</th>
                   <th className="text-left px-3 py-2">Modelo</th>
+                  <th className="text-left px-3 py-2">Año</th>
                   <th className="text-left px-3 py-2">Placas</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {visita.vehiculos.length === 0 ? (
                   <tr>
-                    <td colSpan="3" className="px-3 py-4 text-center text-slate-400 text-xs">
+                    <td colSpan="4" className="px-3 py-4 text-center text-slate-400 text-xs">
                       Sin vehículos
                     </td>
                   </tr>
@@ -141,6 +142,7 @@ export default function FormatoVisita({ visita }) {
                     <tr key={v.id}>
                       <td className="px-3 py-2 font-semibold text-slate-900">{v.marca}</td>
                       <td className="px-3 py-2 text-slate-600">{v.modelo}</td>
+                      <td className="px-3 py-2 text-slate-600">{v.anio ?? '—'}</td>
                       <td className="px-3 py-2 text-slate-600 font-mono">{v.placas}</td>
                     </tr>
                   ))
@@ -158,11 +160,11 @@ export default function FormatoVisita({ visita }) {
           </div>
         </div>
 
-        {/* Resolución del encargado */}
+        {/* Resolución de OPIP */}
         {yaResuelta && (visita.comentario_resolucion || visita.fecha_resolucion) && (
           <div className={`rounded-lg border p-3 ${cfg.bg} ${cfg.border}`}>
             <div className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${cfg.text}`}>
-              Comentario del encargado
+              Comentario de OPIP
             </div>
             <div className="text-sm text-slate-800">
               {visita.comentario_resolucion || (

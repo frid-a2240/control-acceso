@@ -30,6 +30,7 @@ export default function VehiculosVisita({ vehiculos }) {
           <tr className="bg-slate-100 border-b border-slate-300 text-[10px] uppercase tracking-wider text-slate-600">
             <th className="text-left px-3 py-2">Marca</th>
             <th className="text-left px-3 py-2">Modelo</th>
+            <th className="text-left px-3 py-2">Año</th>
             <th className="text-left px-3 py-2">Placas</th>
             <th className="text-left px-3 py-2">Visitante</th>
           </tr>
@@ -39,6 +40,7 @@ export default function VehiculosVisita({ vehiculos }) {
             <tr key={v.id}>
               <td className="px-3 py-2 font-semibold text-slate-900">{v.marca}</td>
               <td className="px-3 py-2 text-slate-600">{v.modelo}</td>
+              <td className="px-3 py-2 text-slate-600">{v.anio ?? '—'}</td>
               <td className="px-3 py-2 text-slate-600 font-mono">{v.placas}</td>
               <td className="px-3 py-2 text-slate-600">
                 {(v.personas || []).length === 0 ? (

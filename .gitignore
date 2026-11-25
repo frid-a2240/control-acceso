@@ -8,6 +8,9 @@ backend/storage/fotos/*
 backend/storage/pdfs/*
 backend/prueba.pdf
 
+# ============ Datos personales (padrón de empleados) ============
+*.xlsx
+
 # ============ Frontend (Node / Vite) ============
 frontend/node_modules/
 frontend/dist/

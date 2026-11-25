@@ -4,6 +4,7 @@ Usa ReportLab — puro Python, sin dependencias del sistema (no requiere GTK).
 """
 from pathlib import Path
 from datetime import datetime
+from html import escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
@@ -135,7 +136,7 @@ def _campo(label: str, valor: str) -> Paragraph:
     """Renglón tipo 'Etiqueta: __valor__' con línea de subrayado visual."""
     return Paragraph(
         f'<font color="#374151">{label}</font> '
-        f'<b><u>{valor or "&nbsp;"}</u></b>',
+        f'<b><u>{escape(valor) if valor else "&nbsp;"}</u></b>',
         _style_campo_label,
     )
 
@@ -186,15 +187,15 @@ def _tabla_personas(personas: list[dict]) -> Table:
 
 
 def _tabla_vehiculos(vehiculos: list[dict]) -> Table:
-    header = ["Marca", "Modelo", "Placas"]
+    header = ["Marca", "Modelo", "Año", "Placas"]
     data = [header]
     for v in vehiculos:
-        data.append([v["marca"], v["modelo"], v["placas"]])
+        data.append([v["marca"], v["modelo"], v["anio"] or "", v["placas"]])
 
     if not vehiculos:
-        data.append(["", "", ""])
+        data.append(["", "", "", ""])
 
-    tabla = Table(data, colWidths=[60 * mm, 60 * mm, 60 * mm])
+    tabla = Table(data, colWidths=[55 * mm, 55 * mm, 20 * mm, 50 * mm])
     tabla.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
@@ -209,9 +210,10 @@ def _tabla_vehiculos(vehiculos: list[dict]) -> Table:
     return tabla
 
 
-def _bloque_firmas() -> Table:
+def _bloque_firmas(solicitante: str) -> Table:
+    """Firmas al pie; la del solicitante lleva su nombre completo."""
     firma_izq = Paragraph(
-        "SOLICITO<br/><br/><br/>"
+        f"SOLICITO<br/><br/><b>{escape(solicitante)}</b><br/>"
         '<font color="#000">_______________________________</font><br/>'
         "NOMBRE Y FIRMA",
         _style_firma,
@@ -247,7 +249,7 @@ def generar_pdf_visita(visita: Visita) -> Path:
     ]
 
     vehiculos_ctx = [
-        {"marca": v.marca, "modelo": v.modelo, "placas": v.placas}
+        {"marca": v.marca, "modelo": v.modelo, "anio": v.anio, "placas": v.placas}
         for v in visita.vehiculos
     ]
 
@@ -290,7 +292,7 @@ def generar_pdf_visita(visita: Visita) -> Path:
         _campo(f"Duración de la Visita — {duracion_txt.strip()}   Horario:", visita.horario),
         Spacer(1, 3 * mm),
         Paragraph("Datos de las visitas", _style_subtitulo),
-        Paragraph(f"<b>Empresa:</b> {visita.empresa_solicitante}", _styles["Normal"]),
+        Paragraph(f"<b>Empresa:</b> {escape(visita.empresa_solicitante)}", _styles["Normal"]),
         Spacer(1, 2 * mm),
         _tabla_personas(personas_ctx),
         Spacer(1, 5 * mm),
@@ -300,7 +302,7 @@ def generar_pdf_visita(visita: Visita) -> Path:
         Spacer(1, 5 * mm),
         _campo("Observaciones:", visita.observaciones or ""),
         Spacer(1, 10 * mm),
-        KeepTogether(_bloque_firmas()),
+        KeepTogether(_bloque_firmas(visita.solicitante.nombre_completo)),
         Spacer(1, 5 * mm),
         Paragraph(
             "El presente documento es implementado en cumplimiento a las "

@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react'
 
 import { useAuth } from '../contexts/AuthContext'
+import { inicioDeRol } from '../utils/roles'
 import isplogo from '../imports/isplogo.png'
 import acceso from '../imports/acceso.png'
 
@@ -32,7 +33,7 @@ export default function Login() {
       if (from) {
         navigate(from, { replace: true })
       } else {
-        navigate(user.rol === 'guardia' ? '/guardia' : '/encargado', { replace: true })
+        navigate(inicioDeRol(user.rol), { replace: true })
       }
     } catch (err) {
       setError(
@@ -66,7 +67,7 @@ export default function Login() {
               Infraestructura y Servicios Portuarios
             </p>
             <h1 className="mt-1 text-3xl font-bold tracking-tight" style={{ color: 'var(--isp-turquesa)' }}>
-              Control de Acceso
+              SICAPI 
             </h1>
           </div>
 
@@ -83,14 +84,14 @@ export default function Login() {
             {/* Usuario */}
             <div className="flex flex-col gap-2">
               <label htmlFor="login-user" className="text-sm font-semibold text-slate-800">
-                Usuario
+                Número de control
               </label>
               <input
                 id="login-user"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Ej. guardia1"
+                placeholder="Tu número de control"
                 autoFocus
                 autoComplete="username"
                 disabled={loading}
@@ -144,6 +145,12 @@ export default function Login() {
               {loading ? 'Ingresando…' : 'Ingresar'}
             </button>
           </form>
+
+          <div className="mt-5 flex items-center justify-between text-xs">
+            <Link to="/olvide-password" className="font-semibold text-slate-500 hover:text-slate-700 transition">
+              ¿Olvidaste tu contraseña?
+            </Link>
+          </div>
 
           <div className="mt-10 text-center text-[11px] text-slate-400 lg:hidden">
             © {new Date().getFullYear()} ISP · Control de Acceso

@@ -1,4 +1,4 @@
-"""Schemas de usuarios del sistema (guardias y encargados)."""
+"""Schemas de usuarios del sistema (solicitantes y OPIP)."""
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field

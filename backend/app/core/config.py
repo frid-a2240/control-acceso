@@ -26,12 +26,14 @@ class Settings(BaseSettings):
     MAIL_STARTTLS: bool = True
     MAIL_SSL_TLS: bool = False
 
-    # Destinatario notificaciones de aprobación
-    ENCARGADO_EMAIL: str
+    # Respaldo: solo se usa si ningún usuario OPIP tiene correo registrado
+    OPIP_EMAIL: str
 
     # Aplicación
     APP_NAME: str = "Control de Acceso ISP"
     ROOT_PATH: str = ""
+    # URL con la que entran los usuarios; se usa en los enlaces de los correos
+    APP_URL: str = "http://localhost:5173/control-acceso"
     CORS_ORIGINS: str = "http://localhost:5173"
 
     model_config = SettingsConfigDict(

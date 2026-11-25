@@ -1,7 +1,7 @@
 """Vehículos registrados — se autocompletan por placas y quedan ligados a su dueño."""
 from datetime import datetime
 
-from sqlalchemy import String, DateTime, ForeignKey, Table, Column
+from sqlalchemy import Integer, String, DateTime, ForeignKey, Table, Column, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -21,11 +21,20 @@ persona_vehiculos = Table(
 
 class Vehiculo(Base):
     __tablename__ = "vehiculos"
+    # Como en personas: cada solicitante guarda las placas de sus visitantes.
+    __table_args__ = (
+        UniqueConstraint("registrado_por_id", "placas", name="uq_vehiculos_dueno_placas"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     marca: Mapped[str] = mapped_column(String(100), nullable=False)
     modelo: Mapped[str] = mapped_column(String(50), nullable=False)
-    placas: Mapped[str] = mapped_column(String(20), unique=True, index=True, nullable=False)
+    # Nulo solo en vehículos registrados antes de pedir el año.
+    anio: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    placas: Mapped[str] = mapped_column(String(20), index=True, nullable=False)
+    registrado_por_id: Mapped[int | None] = mapped_column(
+        ForeignKey("usuarios_sistema.id"), nullable=True, index=True
+    )
     fecha_registro: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )

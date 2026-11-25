@@ -2,6 +2,7 @@
 
 Usa fastapi-mail (async, con soporte de adjuntos).
 """
+from html import escape
 from pathlib import Path
 
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
@@ -25,50 +26,47 @@ _conf = ConnectionConfig(
 _fm = FastMail(_conf)
 
 
-async def enviar_notificacion_encargado(
-    folio: str,
-    empresa: str,
-    persona_a_visitar: str,
-    area: str,
-    pdf_path: Path | None = None,
+async def enviar_aviso(
+    destinatarios: list[str],
+    asunto: str,
+    titulo: str,
+    intro: str,
+    datos: list[tuple[str, str]],
+    boton: str,
+    ruta: str,
+    adjunto: Path | None = None,
 ) -> None:
-    """Notifica al encargado que hay una nueva solicitud pendiente de aprobación."""
+    """Aviso del flujo de una visita, con enlace directo al sistema.
+
+    Lo que captura el usuario se escapa para que no pueda inyectar HTML.
+    """
+    filas = "".join(
+        f"""
+                <tr>
+                    <td style="padding: 8px 12px 8px 0; color: #6b7280;
+                               vertical-align: top;">{escape(etiqueta)}:</td>
+                    <td style="padding: 8px 0; font-weight: bold;">{escape(valor)}</td>
+                </tr>"""
+        for etiqueta, valor in datos
+    )
+    url = escape(settings.APP_URL.rstrip("/") + ruta, quote=True)
 
     html = f"""
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
-        <div style="background: linear-gradient(135deg, #1e40af, #3b82f6);
+        <div style="background: #1e40af; background: linear-gradient(135deg, #1e40af, #3b82f6);
                     color: white; padding: 20px; border-radius: 8px 8px 0 0;">
-            <h2 style="margin: 0;">Nueva solicitud de acceso</h2>
-            <p style="margin: 4px 0 0 0; opacity: .9;">Control de Acceso ISP</p>
+            <h2 style="margin: 0;">{escape(titulo)}</h2>
+            <p style="margin: 4px 0 0 0; opacity: .9;">SICAPI · Control de Acceso ISP</p>
         </div>
         <div style="border: 1px solid #e5e7eb; border-top: 0;
                     padding: 24px; border-radius: 0 0 8px 8px;">
-            <p>Se recibió una nueva solicitud de acceso temporal
-               que requiere su aprobación:</p>
-
-            <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
-                <tr>
-                    <td style="padding: 8px 0; color: #6b7280;">Folio:</td>
-                    <td style="padding: 8px 0; font-family: monospace;
-                               font-weight: bold;">{folio}</td>
-                </tr>
-                <tr>
-                    <td style="padding: 8px 0; color: #6b7280;">Empresa:</td>
-                    <td style="padding: 8px 0;">{empresa}</td>
-                </tr>
-                <tr>
-                    <td style="padding: 8px 0; color: #6b7280;">Persona a visitar:</td>
-                    <td style="padding: 8px 0;">{persona_a_visitar}</td>
-                </tr>
-                <tr>
-                    <td style="padding: 8px 0; color: #6b7280;">Área:</td>
-                    <td style="padding: 8px 0;">{area}</td>
-                </tr>
+            <p>{escape(intro)}</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">{filas}
             </table>
-
-            <p style="margin-top: 24px;">
-                Ingrese a la aplicación para revisar el formato completo
-                y aprobar o rechazar la solicitud.
+            <p style="text-align: center; margin: 28px 0;">
+                <a href="{url}" style="background: #1e293b; color: white; padding: 12px 24px;
+                          border-radius: 8px; text-decoration: none;
+                          font-weight: bold;">{escape(boton)}</a>
             </p>
             <p style="color: #6b7280; font-size: 12px; margin-top: 32px;">
                 Este es un mensaje automático. No responda a este correo.
@@ -77,12 +75,55 @@ async def enviar_notificacion_encargado(
     </div>
     """
 
-    message = MessageSchema(
-        subject=f"[Control de Acceso ISP] Nueva solicitud {folio}",
-        recipients=[settings.ENCARGADO_EMAIL],
+    await _fm.send_message(MessageSchema(
+        subject=f"[SICAPI] {asunto}",
+        recipients=destinatarios,
         body=html,
         subtype=MessageType.html,
-        attachments=[str(pdf_path)] if pdf_path else [],
+        attachments=[str(adjunto)] if adjunto else [],
+    ))
+
+
+async def enviar_codigo_recuperacion(
+    email: str,
+    nombre_completo: str,
+    codigo: str,
+) -> None:
+    """Envía el folio para restablecer contraseña (autoregistro / login)."""
+
+    html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+        <div style="background: linear-gradient(135deg, #1e40af, #3b82f6);
+                    color: white; padding: 20px; border-radius: 8px 8px 0 0;">
+            <h2 style="margin: 0;">Recuperación de contraseña</h2>
+            <p style="margin: 4px 0 0 0; opacity: .9;">Control de Acceso ISP</p>
+        </div>
+        <div style="border: 1px solid #e5e7eb; border-top: 0;
+                    padding: 24px; border-radius: 0 0 8px 8px;">
+            <p>Hola {escape(nombre_completo)}, recibimos una solicitud para restablecer
+               tu contraseña. Usa el siguiente folio para completar el proceso
+               en la aplicación:</p>
+
+            <div style="text-align: center; margin: 24px 0;">
+                <span style="display: inline-block; font-family: monospace;
+                             font-size: 28px; font-weight: bold; letter-spacing: 4px;
+                             background: #f3f4f6; padding: 12px 24px; border-radius: 8px;
+                             color: #0f172a;">{codigo}</span>
+            </div>
+
+            <p style="color: #6b7280; font-size: 12px;">
+                Este folio es válido por 30 minutos. Si tú no solicitaste este
+                cambio, ignora este correo — tu contraseña actual sigue siendo válida.
+            </p>
+        </div>
+    </div>
+    """
+
+    message = MessageSchema(
+        subject="[Control de Acceso ISP] Folio para restablecer tu contraseña",
+        recipients=[email],
+        body=html,
+        subtype=MessageType.html,
     )
 
     await _fm.send_message(message)

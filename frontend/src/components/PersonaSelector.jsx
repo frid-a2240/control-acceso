@@ -280,6 +280,12 @@ export default function PersonaSelector({
   )
 }
 
+/** Año de 4 dígitos, hasta el modelo del año siguiente. */
+function anioValido(anio) {
+  const n = Number(anio)
+  return /^\d{4}$/.test(anio) && n >= 1950 && n <= new Date().getFullYear() + 1
+}
+
 /** Si lo escrito son puros dígitos lo tratamos como INE, si no como nombre. */
 function repartirBusqueda(texto) {
   const t = (texto || '').trim()
@@ -320,10 +326,10 @@ function ModalCrearPersona({ busquedaInicial, onClose }) {
     }
     // Un vehículo a medio llenar es un error de captura, no algo que ignorar
     const incompleto = vehiculos.find(
-      (v) => !v.marca.trim() || !v.modelo.trim() || !v.placas.trim(),
+      (v) => !v.marca.trim() || !v.modelo.trim() || !anioValido(v.anio) || !v.placas.trim(),
     )
     if (incompleto) {
-      setError('Completa marca, modelo y placas de cada vehículo (o quítalo).')
+      setError('Completa marca, modelo, año (4 dígitos) y placas de cada vehículo (o quítalo).')
       return
     }
     const placas = vehiculos.map((v) => v.placas.trim().toUpperCase())
@@ -343,12 +349,14 @@ function ModalCrearPersona({ busquedaInicial, onClose }) {
         vehiculos: vehiculos.map((v, i) => ({
           marca: v.marca.trim(),
           modelo: v.modelo.trim(),
+          anio: Number(v.anio),
           placas: placas[i],
         })),
       })
       onClose(nueva)
     } catch (err) {
-      setError(err.response?.data?.detail || 'No se pudo registrar la persona.')
+      const detalle = err.response?.data?.detail
+      setError(typeof detalle === 'string' ? detalle : 'No se pudo registrar la persona. Revisa los datos.')
     } finally {
       setGuardando(false)
     }
@@ -459,7 +467,7 @@ function ModalCrearPersona({ busquedaInicial, onClose }) {
               <button
                 type="button"
                 onClick={() =>
-                  setVehiculos((prev) => [...prev, { marca: '', modelo: '', placas: '' }])
+                  setVehiculos((prev) => [...prev, { marca: '', modelo: '', anio: '', placas: '' }])
                 }
                 className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
               >
@@ -476,7 +484,7 @@ function ModalCrearPersona({ busquedaInicial, onClose }) {
             ) : (
               <div className="flex flex-col gap-2">
                 {vehiculos.map((v, i) => (
-                  <div key={i} className="flex items-center gap-2">
+                  <div key={i} className="flex flex-wrap sm:flex-nowrap items-center gap-2">
                     <input
                       type="text"
                       value={v.marca}
@@ -490,6 +498,16 @@ function ModalCrearPersona({ busquedaInicial, onClose }) {
                       onChange={(e) => setVehiculo(i, 'modelo', e.target.value)}
                       className="input flex-1 min-w-0"
                       placeholder="Modelo"
+                    />
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={4}
+                      value={v.anio}
+                      onChange={(e) => setVehiculo(i, 'anio', e.target.value.replace(/\D/g, ''))}
+                      className="input !w-20 shrink-0"
+                      placeholder="Año"
+                      aria-label="Año"
                     />
                     <input
                       type="text"
@@ -552,7 +570,7 @@ function ModalCrearPersona({ busquedaInicial, onClose }) {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function ModalPlacasNuevas({ persona, onClose }) {
-  const [form, setForm] = useState({ marca: '', modelo: '', placas: '' })
+  const [form, setForm] = useState({ marca: '', modelo: '', anio: '', placas: '' })
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
 
@@ -562,17 +580,23 @@ function ModalPlacasNuevas({ persona, onClose }) {
       setError('Todos los campos son obligatorios.')
       return
     }
+    if (!anioValido(form.anio)) {
+      setError('Escribe el año del vehículo con 4 dígitos, por ejemplo 2015.')
+      return
+    }
     setGuardando(true)
     try {
       const v = await personasService.agregarVehiculo(persona.id, {
         marca: form.marca.trim(),
         modelo: form.modelo.trim(),
+        anio: Number(form.anio),
         placas: form.placas.trim().toUpperCase(),
       })
       onClose(v)
     } catch (err) {
       // El backend rechaza placas que ya son de otra persona
-      setError(err.response?.data?.detail || 'No se pudieron registrar las placas.')
+      const detalle = err.response?.data?.detail
+      setError(typeof detalle === 'string' ? detalle : 'No se pudieron registrar las placas. Revisa los datos.')
     } finally {
       setGuardando(false)
     }
@@ -613,7 +637,18 @@ function ModalPlacasNuevas({ persona, onClose }) {
               value={form.modelo}
               onChange={(e) => setForm({ ...form, modelo: e.target.value })}
               className="input"
-              placeholder="Ej. CRV 2015"
+              placeholder="Ej. CRV"
+            />
+          </Field>
+          <Field label="Año" required>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={4}
+              value={form.anio}
+              onChange={(e) => setForm({ ...form, anio: e.target.value.replace(/\D/g, '') })}
+              className="input"
+              placeholder="Ej. 2015"
             />
           </Field>
           <Field label="Placas" required>

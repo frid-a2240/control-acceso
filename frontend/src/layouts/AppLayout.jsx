@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
-  LogOut, Menu, X, ChevronsLeft,
+  LogOut, Menu, X, ChevronsLeft, KeyRound, Mail,
 } from 'lucide-react'
 import Toaster from '../components/Toaster'
 import { useRealtime } from '../contexts/RealtimeContext'
 import { useAuth } from '../contexts/AuthContext'
+import { ETIQUETA_ROL, ROLES_EN_VIVO } from '../utils/roles'
 import isplogo from '../imports/isplogo.png'
 
 /**
@@ -24,8 +25,8 @@ export default function AppLayout({ items }) {
     navigate('/login', { replace: true })
   }
 
-  const rolLabel = user?.rol === 'guardia' ? 'Guardia' : 'Encargado'
-  const rolColor = user?.rol === 'guardia'
+  const rolLabel = ETIQUETA_ROL[user?.rol] ?? ''
+  const rolColor = user?.rol === 'solicitante'
     ? 'bg-amber-100 text-amber-800 border-amber-200'
     : 'bg-emerald-100 text-emerald-800 border-emerald-200'
 
@@ -52,7 +53,7 @@ export default function AppLayout({ items }) {
                   className="text-sm font-bold truncate"
                   style={{ color: 'var(--isp-azul)' }}
                 >
-                  Control de Acceso
+                  SICAPI
                 </div>
               </div>
             )}
@@ -108,13 +109,16 @@ export default function AppLayout({ items }) {
                     <div className="text-sm font-semibold text-slate-900 truncate">
                       {user?.nombre_completo}
               </div>
+                    {user?.departamento && (
+                      <div className="text-[11px] text-slate-500 truncate">{user.departamento}</div>
+                    )}
                  <div className="flex items-center gap-1.5 mt-0.5">
                     <span
                     className={`inline-block text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${rolColor}`}
                       >
                     {rolLabel}
                    </span>
-                 {user?.rol === 'guardia' && (
+                 {ROLES_EN_VIVO.includes(user?.rol) && (
                 <span
                    className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${
                        conectado
@@ -130,6 +134,20 @@ export default function AppLayout({ items }) {
          </div>
           </div>
               </div>
+              <Link
+                to="/mi-correo"
+                className="w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition"
+              >
+                <Mail size={16} />
+                Mi correo
+              </Link>
+              <Link
+                to="/cambiar-password"
+                className="w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition"
+              >
+                <KeyRound size={16} />
+                Cambiar contraseña
+              </Link>
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition"
@@ -197,6 +215,20 @@ export default function AppLayout({ items }) {
               </ul>
             </nav>
             <div className="border-t border-[var(--border)] p-3">
+              <Link
+                to="/mi-correo"
+                className="w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition"
+              >
+                <Mail size={16} />
+                Mi correo
+              </Link>
+              <Link
+                to="/cambiar-password"
+                className="w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition"
+              >
+                <KeyRound size={16} />
+                Cambiar contraseña
+              </Link>
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"

@@ -33,13 +33,15 @@ app.include_router(visitas.router)
 app.include_router(ws.router)
 
 
-# ---------- Archivos estáticos (fotos y PDFs generados) ----------
+# ---------- Archivos estáticos (solo fotos) ----------
+# Los PDFs no se publican: su nombre es el folio, que se puede adivinar, y
+# llevan datos de las visitas. Se envían a OPIP adjuntos al correo.
 STORAGE_DIR = Path(__file__).resolve().parent.parent / "storage"
 STORAGE_DIR.mkdir(exist_ok=True)
 (STORAGE_DIR / "fotos").mkdir(exist_ok=True)
 (STORAGE_DIR / "pdfs").mkdir(exist_ok=True)
 
-app.mount("/storage", StaticFiles(directory=str(STORAGE_DIR)), name="storage")
+app.mount("/storage/fotos", StaticFiles(directory=str(STORAGE_DIR / "fotos")), name="fotos")
 
 
 # ---------- Healthcheck ----------

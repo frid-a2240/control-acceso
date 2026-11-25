@@ -1,21 +1,24 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Users, Search, RefreshCw, User, Calendar, IdCard, X,
-  AlertCircle, UserPlus, Car, Trash2,
+  AlertCircle, UserPlus, Car,
 } from 'lucide-react'
 
-import { personasService, vehiculosService } from '../../services/visitas'
+import { personasService } from '../../services/visitas'
 import FotoPersona from '../../components/FotoPersona'
 import { useAuth } from '../../contexts/AuthContext'
+import { parseFecha } from '../../utils/formatoVisita'
 
 function formatFecha(iso) {
   if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('es-MX', {
+  return parseFecha(iso).toLocaleDateString('es-MX', {
     day: '2-digit', month: '2-digit', year: 'numeric',
   })
 }
 
 export default function Personas() {
+  const { user } = useAuth()
+  const esOpip = user?.rol === 'opip'
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -60,7 +63,9 @@ export default function Personas() {
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Personas registradas</h1>
             <p className="text-sm text-slate-500 mt-0.5">
-              Directorio de visitantes — se autocompletan al capturar una nueva solicitud.
+              {esOpip
+                ? 'Visitantes registrados por todos los solicitantes.'
+                : 'Los visitantes que tú registraste — se autocompletan en tus próximas solicitudes.'}
             </p>
           </div>
         </div>
@@ -119,6 +124,7 @@ export default function Personas() {
             <PersonaCard
               key={p.id}
               persona={p}
+              mostrarDueno={esOpip}
               onClick={() => setSeleccionada(p)}
             />
           ))}
@@ -130,17 +136,13 @@ export default function Personas() {
         <ModalDetalle
           persona={seleccionada}
           onClose={() => setSeleccionada(null)}
-          onEliminada={(id) => {
-            setItems((prev) => prev.filter((p) => p.id !== id))
-            setSeleccionada(null)
-          }}
         />
       )}
     </div>
   )
 }
 
-function PersonaCard({ persona, onClick }) {
+function PersonaCard({ persona, mostrarDueno, onClick }) {
   return (
     <button
       onClick={onClick}
@@ -164,6 +166,11 @@ function PersonaCard({ persona, onClick }) {
             ? `Última visita: ${formatFecha(persona.ultima_visita)}`
             : 'Sin visitas registradas'}
         </div>
+        {mostrarDueno && persona.registrado_por_nombre && (
+          <div className="text-[11px] text-slate-400 truncate">
+            Registró: {persona.registrado_por_nombre}
+          </div>
+        )}
         {persona.vehiculos?.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-0.5">
             {persona.vehiculos.map((v) => (
@@ -182,41 +189,8 @@ function PersonaCard({ persona, onClick }) {
   )
 }
 
-function ModalDetalle({ persona, onClose, onEliminada }) {
-  const { user } = useAuth()
-  const esEncargado = user?.rol === 'encargado'
-
-  const [vehiculos, setVehiculos] = useState(persona.vehiculos || [])
-  const [borrando, setBorrando] = useState(false)
-  const [borrandoVehiculoId, setBorrandoVehiculoId] = useState(null)
-  const [error, setError] = useState('')
-
-  const eliminarPersona = async () => {
-    if (!window.confirm(`¿Borrar a ${persona.nombre}? Esta acción no se puede deshacer.`)) return
-    setError('')
-    setBorrando(true)
-    try {
-      await personasService.eliminar(persona.id)
-      onEliminada(persona.id)
-    } catch (err) {
-      setError(err.response?.data?.detail || 'No se pudo borrar la persona.')
-      setBorrando(false)
-    }
-  }
-
-  const eliminarVehiculo = async (v) => {
-    if (!window.confirm(`¿Borrar las placas ${v.placas}? Esta acción no se puede deshacer.`)) return
-    setError('')
-    setBorrandoVehiculoId(v.id)
-    try {
-      await vehiculosService.eliminar(v.id)
-      setVehiculos((prev) => prev.filter((x) => x.id !== v.id))
-    } catch (err) {
-      setError(err.response?.data?.detail || 'No se pudo borrar el vehículo.')
-    } finally {
-      setBorrandoVehiculoId(null)
-    }
-  }
+function ModalDetalle({ persona, onClose }) {
+  const vehiculos = persona.vehiculos || []
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-slate-900/60">
@@ -227,16 +201,6 @@ function ModalDetalle({ persona, onClose, onEliminada }) {
             <h3 className="font-bold text-slate-900">Detalle</h3>
           </div>
           <div className="flex items-center gap-1">
-            {esEncargado && (
-              <button
-                onClick={eliminarPersona}
-                disabled={borrando}
-                title="Borrar persona"
-                className="p-1.5 rounded-md text-slate-400 hover:bg-red-50 hover:text-red-600 transition disabled:opacity-50"
-              >
-                <Trash2 size={16} />
-              </button>
-            )}
             <button
               onClick={onClose}
               className="p-1.5 rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
@@ -287,31 +251,15 @@ function ModalDetalle({ persona, onClose, onEliminada }) {
                     key={v.id}
                     className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm"
                   >
-                    <span className="text-slate-700 truncate">{v.marca} {v.modelo}</span>
+                    <span className="text-slate-700 truncate">{v.marca} {v.modelo} {v.anio ?? ''}</span>
                     <span className="flex items-center gap-2 shrink-0">
                       <span className="font-mono font-semibold text-slate-900">{v.placas}</span>
-                      {esEncargado && (
-                        <button
-                          onClick={() => eliminarVehiculo(v)}
-                          disabled={borrandoVehiculoId === v.id}
-                          title="Borrar vehículo"
-                          className="p-1 rounded text-slate-300 hover:bg-red-50 hover:text-red-600 transition disabled:opacity-50"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      )}
                     </span>
                   </li>
                 ))}
               </ul>
             )}
           </div>
-
-          {error && (
-            <div className="w-full mt-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              <AlertCircle size={16} className="shrink-0" /> {error}
-            </div>
-          )}
         </div>
       </div>
     </div>

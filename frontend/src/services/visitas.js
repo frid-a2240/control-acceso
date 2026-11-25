@@ -16,6 +16,11 @@ export const visitasService = {
     return data
   },
 
+  aprobadas: async () => {
+    const { data } = await api.get('/visitas/aprobadas')
+    return data
+  },
+
   historial: async () => {
     const { data } = await api.get('/visitas/historial')
     return data
@@ -32,10 +37,6 @@ export const visitasService = {
       comentario: comentario || null,
     })
     return data
-  },
-
-  eliminar: async (id) => {
-    await api.delete(`/visitas/${id}`)
   },
 }
 
@@ -70,29 +71,12 @@ export const personasService = {
     const { data } = await api.post(`/personas/${personaId}/vehiculos`, vehiculo)
     return data
   },
-
-  quitarVehiculo: async (personaId, vehiculoId) => {
-    await api.delete(`/personas/${personaId}/vehiculos/${vehiculoId}`)
-  },
-
-  eliminar: async (id) => {
-    await api.delete(`/personas/${id}`)
-  },
 }
 
 export const empresasService = {
   listar: async (q) => {
     const { data } = await api.get('/empresas', { params: q ? { q } : {} })
     return data
-  },
-
-  crear: async (nombre) => {
-    const { data } = await api.post('/empresas', { nombre })
-    return data
-  },
-
-  eliminar: async (id) => {
-    await api.delete(`/empresas/${id}`)
   },
 }
 
@@ -115,9 +99,5 @@ export const vehiculosService = {
     if (personaId) params.persona_id = personaId
     const { data } = await api.get('/vehiculos', { params })
     return data
-  },
-
-  eliminar: async (id) => {
-    await api.delete(`/vehiculos/${id}`)
   },
 }

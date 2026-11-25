@@ -7,7 +7,7 @@ import { useRealtime } from '../../contexts/RealtimeContext'
 import FormatoVisita from '../../components/FormatoVisita'
 import { estadoConfig } from '../../utils/formatoVisita'
 
-/** El mismo formato que ve el encargado, en solo lectura para el guardia. */
+/** El mismo formato que ve OPIP, en solo lectura para el solicitante. */
 export default function DetalleSolicitud() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -31,7 +31,7 @@ export default function DetalleSolicitud() {
 
   useEffect(() => { cargar() }, [id])
 
-  // Si el encargado la resuelve mientras el guardia la tiene abierta, se actualiza sola
+  // Si OPIP la resuelve mientras el solicitante la tiene abierta, se actualiza sola
   useEffect(() => {
     return suscribir((evento) => {
       if (evento.type !== 'visita_resuelta') return
@@ -63,7 +63,7 @@ export default function DetalleSolicitud() {
     return (
       <div className="max-w-4xl mx-auto">
         <button
-          onClick={() => navigate('/guardia')}
+          onClick={() => navigate('/solicitante')}
           className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 mb-4"
         >
           <ArrowLeft size={14} /> Volver a mis solicitudes
@@ -83,7 +83,7 @@ export default function DetalleSolicitud() {
     <div className="max-w-4xl mx-auto pb-8">
       <div className="flex items-center justify-between gap-4 mb-6">
         <button
-          onClick={() => navigate('/guardia')}
+          onClick={() => navigate('/solicitante')}
           className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 transition"
         >
           <ArrowLeft size={14} /> Volver a mis solicitudes

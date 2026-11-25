@@ -13,6 +13,13 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # ---------- Passwords ----------
 
+# Contraseña con la que se da de alta el padrón; obliga a cambiarla al entrar.
+PASSWORD_INICIAL = "123456"
+
+# Se compara contra este hash cuando el usuario no existe, para que la
+# respuesta tarde lo mismo y no revele qué números de control son válidos.
+HASH_SENUELO = pwd_context.hash("senuelo")
+
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 

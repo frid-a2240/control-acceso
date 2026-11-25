@@ -1,21 +1,21 @@
 """Módulo Usuarios — personas visitantes recurrentes.
 
-Cuando el guardia captura una nueva visita, busca por INE (o por nombre) y
-elige de la lista de coincidencias. Al seleccionarla, sus placas registradas
+Cuando el solicitante captura una nueva visita, busca por INE (o por nombre) y
+elige de la lista de coincidencias, que incluye solo a quienes él registró. Al seleccionarla, sus placas registradas
 vienen incluidas para que no haya que buscarlas a mano ni ligarlas por error
 a otra persona.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_user, require_encargado
+from app.core.auth import require_captura
 from app.database import get_db
 from app.models.persona import Persona
 from app.models.usuario import Usuario
 from app.models.vehiculo import Vehiculo
 from app.schemas.persona import PersonaCreate, PersonaOut, PersonaUpdate, VehiculoAlta
 from app.schemas.vehiculo import VehiculoOut
+from app.services.alcance import persona_o_404, visibles
 from app.services.media import guardar_foto_base64
 
 
@@ -25,15 +25,28 @@ router = APIRouter(prefix="/api/personas", tags=["personas"])
 def _registrar_vehiculo_de(db: Session, persona: Persona, data: VehiculoAlta) -> Vehiculo:
     """Da de alta las placas a nombre de `persona`.
 
-    Las placas son únicas en todo el sistema: si ya existen y son de otra
-    persona se rechaza el alta, para que no queden ligadas al visitante
-    equivocado.
+    Las placas son únicas entre los visitantes de cada solicitante: si ya son
+    de otro de sus visitantes se rechaza el alta, para que no queden ligadas al
+    equivocado. Lo que registraron otros solicitantes no cuenta ni se revela.
     """
     placas = data.placas.upper().strip()
-    v = db.query(Vehiculo).filter(Vehiculo.placas == placas).first()
+    v = (
+        db.query(Vehiculo)
+        .filter(
+            Vehiculo.placas == placas,
+            Vehiculo.registrado_por_id == persona.registrado_por_id,
+        )
+        .first()
+    )
 
     if v is None:
-        v = Vehiculo(marca=data.marca.strip(), modelo=data.modelo.strip(), placas=placas)
+        v = Vehiculo(
+            marca=data.marca.strip(),
+            modelo=data.modelo.strip(),
+            anio=data.anio,
+            placas=placas,
+            registrado_por_id=persona.registrado_por_id,
+        )
         db.add(v)
         db.flush()
         return v
@@ -61,31 +74,33 @@ def _registrar_vehiculo_de(db: Session, persona: Persona, data: VehiculoAlta) ->
 def listar_personas(
     q: str | None = None,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(require_captura),
 ):
     """Búsqueda parcial por nombre o número de identificación.
 
     Con 2-3 caracteres ya devuelve coincidencias — es lo que alimenta el
     dropdown del buscador en 'Nueva Solicitud'.
     """
-    query = db.query(Persona)
+    query = visibles(db, Persona, usuario)
     if q:
         patron = f"%{q.strip()}%"
         query = query.filter(
             (Persona.nombre.ilike(patron))
             | (Persona.numero_identificacion.ilike(patron))
         )
-    return query.order_by(Persona.nombre).limit(50).all()
+    query = query.order_by(Persona.nombre)
+    # El buscador solo necesita unas cuantas; el directorio las muestra todas
+    return query.limit(50).all() if q else query.all()
 
 
 @router.get("/buscar-ine/{numero}", response_model=PersonaOut)
 def buscar_por_ine(
     numero: str,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(require_captura),
 ):
     """Autocompletado exacto por número de identificación."""
-    p = db.query(Persona).filter(Persona.numero_identificacion == numero).first()
+    p = visibles(db, Persona, usuario).filter(Persona.numero_identificacion == numero).first()
     if not p:
         raise HTTPException(status_code=404, detail="Persona no registrada")
     return p
@@ -95,11 +110,9 @@ def buscar_por_ine(
 def obtener_persona(
     persona_id: int,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(require_captura),
 ):
-    p = db.query(Persona).filter(Persona.id == persona_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Persona no encontrada")
+    p = persona_o_404(db, persona_id, usuario)
     return p
 
 
@@ -107,16 +120,19 @@ def obtener_persona(
 def crear_persona(
     data: PersonaCreate,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(require_captura),
 ):
     """Registra una persona nueva junto con las placas que trae.
 
-    Si ya existe con el mismo INE, la reutiliza y le agrega las placas del
+    Si este usuario ya la tiene con el mismo INE, la reutiliza y le agrega las placas del
     payload. Unas placas que ya son de otra persona se rechazan (409).
     """
     p = (
         db.query(Persona)
-        .filter(Persona.numero_identificacion == data.numero_identificacion.strip())
+        .filter(
+            Persona.numero_identificacion == data.numero_identificacion.strip(),
+            Persona.registrado_por_id == usuario.id,
+        )
         .first()
     )
 
@@ -129,6 +145,7 @@ def crear_persona(
             numero_identificacion=data.numero_identificacion.strip(),
             foto_path=foto_path,
             empresa_id=data.empresa_id,
+            registrado_por_id=usuario.id,
         )
         db.add(p)
         db.flush()
@@ -150,7 +167,7 @@ def agregar_vehiculo_a_persona(
     persona_id: int,
     data: VehiculoAlta,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(require_captura),
 ):
     """Registra placas adicionales a una persona ya registrada.
 
@@ -158,9 +175,7 @@ def agregar_vehiculo_a_persona(
     la próxima visita ya salen las dos. Si esas placas ya son de alguien más
     se rechaza (409) en vez de ligarlas al visitante equivocado.
     """
-    p = db.query(Persona).filter(Persona.id == persona_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Persona no encontrada")
+    p = persona_o_404(db, persona_id, usuario)
 
     v = _registrar_vehiculo_de(db, p, data)
     p.vehiculos.append(v)
@@ -170,65 +185,14 @@ def agregar_vehiculo_a_persona(
     return v
 
 
-@router.delete("/{persona_id}/vehiculos/{vehiculo_id}", status_code=status.HTTP_204_NO_CONTENT)
-def quitar_vehiculo_de_persona(
-    persona_id: int,
-    vehiculo_id: int,
-    db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
-):
-    """Desliga las placas de la persona. El vehículo sigue existiendo."""
-    p = db.query(Persona).filter(Persona.id == persona_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Persona no encontrada")
-
-    v = next((x for x in p.vehiculos if x.id == vehiculo_id), None)
-    if v is None:
-        raise HTTPException(status_code=404, detail="Esa persona no tiene ligadas esas placas")
-
-    p.vehiculos.remove(v)
-    db.commit()
-
-
-@router.delete("/{persona_id}", status_code=status.HTTP_204_NO_CONTENT)
-def eliminar_persona(
-    persona_id: int,
-    db: Session = Depends(get_db),
-    _: Usuario = Depends(require_encargado),
-):
-    """Borra una persona (uso temporal mientras el sistema está en pruebas).
-
-    Si tiene solicitudes de visita asociadas se rechaza con 409: hay que
-    borrar primero esas solicitudes para no perder el historial ligado.
-    """
-    p = db.query(Persona).filter(Persona.id == persona_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Persona no encontrada")
-
-    try:
-        db.delete(p)
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"No se puede borrar a {p.nombre}: tiene solicitudes de visita "
-                "asociadas. Borra primero esas solicitudes."
-            ),
-        )
-
-
 @router.patch("/{persona_id}", response_model=PersonaOut)
 def actualizar_persona(
     persona_id: int,
     data: PersonaUpdate,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(require_captura),
 ):
-    p = db.query(Persona).filter(Persona.id == persona_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Persona no encontrada")
+    p = persona_o_404(db, persona_id, usuario)
 
     if data.nombre is not None:
         p.nombre = data.nombre.strip()

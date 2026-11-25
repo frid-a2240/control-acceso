@@ -2,21 +2,15 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   RefreshCw, Inbox, Clock, Building2, User, Users, AlertCircle,
-  ChevronRight, Bell, Trash2,
+  ChevronRight, Bell,
 } from 'lucide-react'
 
+import { useRealtime } from '../../contexts/RealtimeContext'
 import { visitasService } from '../../services/visitas'
-
-function formatFecha(iso) {
-  const d = new Date(iso)
-  return d.toLocaleString('es-MX', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  })
-}
+import { formatFechaHora, parseFecha } from '../../utils/formatoVisita'
 
 function tiempoRelativo(iso) {
-  const diff = (Date.now() - new Date(iso).getTime()) / 1000
+  const diff = (Date.now() - parseFecha(iso).getTime()) / 1000
   if (diff < 60) return 'hace un momento'
   if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`
   if (diff < 86400) return `hace ${Math.floor(diff / 3600)} h`
@@ -27,7 +21,7 @@ export default function Pendientes() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [borrando, setBorrando] = useState(null)
+  const { suscribir } = useRealtime()
 
   const cargar = async () => {
     setLoading(true)
@@ -44,18 +38,10 @@ export default function Pendientes() {
 
   useEffect(() => { cargar() }, [])
 
-  const eliminar = async (v) => {
-    if (!window.confirm(`¿Borrar la solicitud ${v.folio}? Esta acción no se puede deshacer.`)) return
-    setBorrando(v.id)
-    try {
-      await visitasService.eliminar(v.id)
-      setItems((prev) => prev.filter((x) => x.id !== v.id))
-    } catch (err) {
-      setError(err.response?.data?.detail || 'No se pudo borrar la solicitud.')
-    } finally {
-      setBorrando(null)
-    }
-  }
+  // Entra sola cuando un solicitante la envía
+  useEffect(() => suscribir((evento) => {
+    if (evento.type === 'visita_nueva') cargar()
+  }), [suscribir])
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -71,7 +57,7 @@ export default function Pendientes() {
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Solicitudes Pendientes</h1>
             <p className="text-sm text-slate-500 mt-0.5">
-              Formatos capturados por los guardias que esperan tu aprobación.
+              Formatos capturados por coordinadores, jefes de área y colaboradores que esperan tu aprobación.
             </p>
           </div>
         </div>
@@ -96,7 +82,7 @@ export default function Pendientes() {
               {items.length} solicitud{items.length !== 1 ? 'es' : ''} pendiente{items.length !== 1 ? 's' : ''}
             </div>
             <div className="text-xs text-amber-700">
-              Revisa los formatos y toma una decisión — el guardia verá la respuesta al instante.
+              Revisa los formatos y toma una decisión — el solicitante verá la respuesta al instante.
             </div>
           </div>
         </div>
@@ -128,12 +114,7 @@ export default function Pendientes() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {items.map((v) => (
-            <PendienteCard
-              key={v.id}
-              visita={v}
-              onEliminar={() => eliminar(v)}
-              borrando={borrando === v.id}
-            />
+            <PendienteCard key={v.id} visita={v} />
           ))}
         </div>
       )}
@@ -141,21 +122,12 @@ export default function Pendientes() {
   )
 }
 
-function PendienteCard({ visita, onEliminar, borrando }) {
+function PendienteCard({ visita }) {
   return (
     <Link
-      to={`/encargado/visita/${visita.id}`}
+      to={`/opip/visita/${visita.id}`}
       className="group relative bg-white rounded-2xl border border-[var(--border)] p-4 hover:border-[var(--primary)] hover:shadow-md transition flex flex-col gap-3"
     >
-      <button
-        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEliminar() }}
-        disabled={borrando}
-        title="Borrar solicitud"
-        className="absolute top-3 right-3 p-1.5 rounded-lg text-slate-300 hover:bg-red-50 hover:text-red-600 transition disabled:opacity-50"
-      >
-        <Trash2 size={15} />
-      </button>
-
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
@@ -166,7 +138,7 @@ function PendienteCard({ visita, onEliminar, borrando }) {
             Pendiente
           </span>
         </div>
-        <ChevronRight size={18} className="text-slate-300 group-hover:text-[var(--primary)] transition shrink-0 mr-6" />
+        <ChevronRight size={18} className="text-slate-300 group-hover:text-[var(--primary)] transition shrink-0" />
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -185,7 +157,7 @@ function PendienteCard({ visita, onEliminar, borrando }) {
       </div>
 
       <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-100">
-        <span>{formatFecha(visita.fecha_creacion)}</span>
+        <span>{formatFechaHora(visita.fecha_creacion)}</span>
         <span className="font-semibold text-amber-600">{tiempoRelativo(visita.fecha_creacion)}</span>
       </div>
     </Link>

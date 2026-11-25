@@ -2,10 +2,11 @@ import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import {
   History, RefreshCw, CheckCircle2, XCircle, Search, AlertCircle,
-  Building2, User, ChevronRight, Trash2,
+  Building2, User, ChevronRight,
 } from 'lucide-react'
 
 import { visitasService } from '../../services/visitas'
+import { formatFechaHora } from '../../utils/formatoVisita'
 
 const estadoConfig = {
   aprobada: {
@@ -20,13 +21,6 @@ const estadoConfig = {
   },
 }
 
-function formatFecha(iso) {
-  return new Date(iso).toLocaleString('es-MX', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  })
-}
-
 export default function Historial() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -34,7 +28,6 @@ export default function Historial() {
 
   const [filtro, setFiltro] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('todas')  // todas | aprobada | rechazada
-  const [borrando, setBorrando] = useState(null)  // id de la solicitud en proceso de borrado
 
   const cargar = async () => {
     setLoading(true)
@@ -64,19 +57,6 @@ export default function Historial() {
     })
   }, [items, filtro, filtroEstado])
 
-  const eliminar = async (v) => {
-    if (!window.confirm(`¿Borrar la solicitud ${v.folio}? Esta acción no se puede deshacer.`)) return
-    setBorrando(v.id)
-    try {
-      await visitasService.eliminar(v.id)
-      setItems((prev) => prev.filter((x) => x.id !== v.id))
-    } catch (err) {
-      setError(err.response?.data?.detail || 'No se pudo borrar la solicitud.')
-    } finally {
-      setBorrando(null)
-    }
-  }
-
   return (
     <div className="max-w-6xl mx-auto">
       {/* Header */}
@@ -91,7 +71,7 @@ export default function Historial() {
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Historial</h1>
             <p className="text-sm text-slate-500 mt-0.5">
-              Solicitudes ya resueltas — aprobadas y rechazadas.
+              Solicitudes rechazadas y aprobadas cuyo plazo ya terminó.
             </p>
           </div>
         </div>
@@ -159,7 +139,7 @@ export default function Historial() {
               return (
                 <li key={v.id} className="flex items-center gap-1">
                   <Link
-                    to={`/encargado/visita/${v.id}`}
+                    to={`/opip/visita/${v.id}`}
                     className="flex flex-1 min-w-0 items-center gap-3 p-4 hover:bg-slate-50 transition"
                   >
                     <div className={`h-10 w-10 rounded-lg flex items-center justify-center border ${cfg.className} shrink-0`}>
@@ -173,6 +153,11 @@ export default function Historial() {
                         <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${cfg.className}`}>
                           {cfg.label}
                         </span>
+                        {v.vencida && (
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-slate-50 text-slate-500 border-slate-200">
+                            Plazo terminado
+                          </span>
+                        )}
                       </div>
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-700">
                         <span className="flex items-center gap-1.5">
@@ -185,19 +170,11 @@ export default function Historial() {
                         </span>
                       </div>
                       <div className="mt-1 text-xs text-slate-400">
-                        {formatFecha(v.fecha_creacion)} · {v.total_personas} visitante{v.total_personas !== 1 ? 's' : ''}
+                        {formatFechaHora(v.fecha_creacion)} · {v.total_personas} visitante{v.total_personas !== 1 ? 's' : ''}
                       </div>
                     </div>
                     <ChevronRight size={16} className="text-slate-300 shrink-0" />
                   </Link>
-                  <button
-                    onClick={() => eliminar(v)}
-                    disabled={borrando === v.id}
-                    title="Borrar solicitud"
-                    className="mr-3 p-2 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 transition disabled:opacity-50 shrink-0"
-                  >
-                    <Trash2 size={16} />
-                  </button>
                 </li>
               )
             })}

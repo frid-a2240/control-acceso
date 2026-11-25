@@ -10,6 +10,7 @@ class VehiculoAlta(BaseModel):
     """Placas que se dan de alta junto con la persona, en el mismo paso."""
     marca: str = Field(min_length=2, max_length=100)
     modelo: str = Field(min_length=1, max_length=50)
+    anio: int = Field(ge=1950, le=2100)
     placas: str = Field(min_length=3, max_length=20)
 
 
@@ -40,6 +41,7 @@ class PersonaOut(BaseModel):
     empresa_id: int | None
     fecha_registro: datetime
     ultima_visita: datetime | None
+    registrado_por_nombre: str | None = None
     vehiculos: list[VehiculoOut] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)

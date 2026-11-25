@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-// En dev, Vite proxy redirige /control-acceso/api al backend en :8000
+// En dev, Vite proxy redirige /control-acceso/api al backend en :8010
 // En prod (IIS bajo /control-acceso), la URL relativa funciona directo
 const api = axios.create({
   baseURL: '/control-acceso/api',

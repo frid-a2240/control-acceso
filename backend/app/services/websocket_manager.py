@@ -1,8 +1,7 @@
-"""Administrador de conexiones WebSocket para notificar a guardias.
+"""Administrador de conexiones WebSocket para notificar en vivo.
 
-Cada guardia se conecta a /ws/guardia/{usuario_id} y queda escuchando.
-Cuando el encargado aprueba/rechaza una visita, notify_guardia() envía
-el resultado al guardia que la creó, sin necesidad de refresh.
+Los usuarios se conectan a /ws/notificaciones y quedan escuchando. Qué se le
+avisa a cada quien está en app/services/notificaciones.py.
 """
 from fastapi import WebSocket
 
@@ -25,10 +24,10 @@ class ConnectionManager:
             if not self._connections[usuario_id]:
                 del self._connections[usuario_id]
 
-    async def notify_guardia(self, usuario_id: int, payload: dict) -> None:
-        """Envía un JSON al guardia. Si no está conectado, no pasa nada
-        (verá la resolución la próxima vez que abra el listado)."""
-        sockets = self._connections.get(usuario_id, [])
+    async def notify_usuario(self, usuario_id: int, payload: dict) -> None:
+        """Envía un JSON al usuario. Si no está conectado, no pasa nada
+        (verá el cambio la próxima vez que abra el listado)."""
+        sockets = list(self._connections.get(usuario_id, []))
         muertos: list[WebSocket] = []
         for ws in sockets:
             try:

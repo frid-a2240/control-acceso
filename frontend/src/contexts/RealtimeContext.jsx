@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useAuth } from './AuthContext'
+import { ROLES_EN_VIVO } from '../utils/roles'
 
 const RealtimeContext = createContext(null)
 
@@ -46,10 +47,10 @@ export function RealtimeProvider({ children }) {
     return () => suscritosRef.current.delete(callback)
   }, [])
 
-  // ━━━━ Manejo del WebSocket (solo para guardias) ━━━━
+  // ━━━━ Manejo del WebSocket (según el rol) ━━━━
   useEffect(() => {
-    if (!user || user.rol !== 'guardia') {
-      // Cierra WS si el usuario ya no es guardia (logout)
+    if (!user || !ROLES_EN_VIVO.includes(user.rol) || user.debe_cambiar_password || !user.email) {
+      // Cierra WS si el usuario cerró sesión o su rol no recibe avisos
       if (wsRef.current) {
         wsRef.current.close()
         wsRef.current = null
@@ -66,7 +67,7 @@ export function RealtimeProvider({ children }) {
     const conectar = () => {
       // Ruta relativa al deploy — Vite proxy la enruta al backend en dev
       const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-      const url = `${proto}://${window.location.host}/control-acceso/ws/guardia?token=${encodeURIComponent(jwt)}`
+      const url = `${proto}://${window.location.host}/control-acceso/ws/notificaciones?token=${encodeURIComponent(jwt)}`
 
       const ws = new WebSocket(url)
       wsRef.current = ws
@@ -84,6 +85,22 @@ export function RealtimeProvider({ children }) {
             try { cb(data) } catch (e) { console.error(e) }
           })
           // Dispara toast según tipo
+          if (data.type === 'visita_nueva') {
+            addToast({
+              tipo: 'info',
+              titulo: `Nueva solicitud ${data.folio}`,
+              mensaje: `${data.empresa} · solicitó ${data.solicitante}`,
+              duracion: 10000,
+            })
+          }
+          if (data.type === 'visita_aprobada' && data.hoy) {
+            addToast({
+              tipo: 'success',
+              titulo: `Nuevo acceso aprobado ${data.folio}`,
+              mensaje: data.empresa,
+              duracion: 10000,
+            })
+          }
           if (data.type === 'visita_resuelta') {
             const aprobada = data.estado === 'aprobada'
             addToast({
@@ -92,7 +109,7 @@ export function RealtimeProvider({ children }) {
                 ? `Solicitud ${data.folio} APROBADA`
                 : `Solicitud ${data.folio} RECHAZADA`,
               mensaje: data.comentario
-                ? `Comentario del encargado: ${data.comentario}`
+                ? `Comentario de OPIP: ${data.comentario}`
                 : (aprobada
                     ? 'El acceso ha sido autorizado.'
                     : 'El acceso ha sido denegado.'),
